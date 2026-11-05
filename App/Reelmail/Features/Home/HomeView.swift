@@ -89,11 +89,13 @@ struct CalmAvatar: View {
 struct CalmActionStyle: ButtonStyle {
     var prominent = false
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        // Delete, remove, decline and clear buttons (role: .destructive) are rose-red, never blue.
+        let tint = configuration.role == .destructive ? CalmStyle.roseInk : CalmStyle.blue
+        return configuration.label
             .font(.subheadline.weight(.medium))
             .padding(.horizontal, 12).frame(minHeight: 40)
-            .foregroundStyle(prominent ? CalmStyle.onBlue : CalmStyle.blue)
-            .background(prominent ? CalmStyle.blue : CalmStyle.blue.opacity(0.08), in: Capsule())
+            .foregroundStyle(prominent ? CalmStyle.onBlue : tint)
+            .background(prominent ? tint : tint.opacity(0.08), in: Capsule())
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
@@ -248,7 +250,7 @@ struct HomeView: View {
             .listRowSeparator(.hidden).listRowBackground(CalmStyle.background)
         let kidProfiles = InsightSettings().load().kids
         if !kidProfiles.isEmpty {
-            KidsRow(count: kidProfiles.reduce(0) { $0 + KidInsights.mail(for: $1, in: store.posts).count })
+            KidsRow(count: kidProfiles.reduce(0) { $0 + store.kidMail(for: $1).count })
                 .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 4, trailing: 20))
                 .listRowSeparator(.hidden).listRowBackground(CalmStyle.background)
         }

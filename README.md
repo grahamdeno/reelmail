@@ -8,7 +8,7 @@ iPhone by Apple Intelligence. See `docs/calm-feed.md` for the sorting rules and 
 
 - **Lovely sends, forwards and files only what you approve.** Google scopes: `gmail.modify` (Trash and Done, approved
   2026-11-01 and 2026-11-02) and, approved 2026-11-04, `gmail.settings.basic` (filters), `gmail.settings.sharing`
-  (forwarding addresses) and `gmail.send`. Every send, forward, filter, forwarding-address, label and decline shows a
+  (forwarding addresses) and `gmail.send`. Every send, forward, filter, label and decline shows a
   preview and waits for your tap; sends and forwards then wait 10 seconds with Undo. Mail is forwarded only to
   addresses you list in Settings, Forwarding addresses. Lovely changes only labels it created (under `Lovely/`) and
   deletes only filters it made. Nothing is ever permanently deleted. Settings, Gmail activity lists everything done.

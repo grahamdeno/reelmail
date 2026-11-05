@@ -32,7 +32,7 @@ struct KidsView: View {
                         .font(.subheadline).foregroundStyle(CalmStyle.secondary)
                 }
                 ForEach(kids) { kid in
-                    let mail = KidInsights.mail(for: kid, in: store.posts)
+                    let mail = store.kidMail(for: kid)
                     Button { router.open(.kid(kid.id)) } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -72,7 +72,7 @@ struct KidView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if let kid {
-                    let mail = KidInsights.mail(for: kid, in: store.posts)
+                    let mail = store.kidMail(for: kid)
                     if mail.isEmpty { Text("No mail about \(kid.name) in your inbox right now.").font(.subheadline).foregroundStyle(CalmStyle.secondary) }
                     ForEach(mail) { item in
                         VStack(alignment: .leading, spacing: 6) {

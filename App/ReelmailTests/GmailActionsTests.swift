@@ -98,11 +98,33 @@ final class GmailActionsTests: XCTestCase {
         rec.reply = #"{"error":{"code":403,"message":"Insufficient Permission","errors":[{"reason":"insufficientPermissions"}]}}"#
         let a = make(d, recorder: rec)
         a.allowlist.add("box@example.com")
-        do { try await a.addForwardingAddress("box@example.com", confirmed: confirmed(.forwardingAddress, to: ["box@example.com"])); XCTFail("should throw") }
+        do { _ = try await a.createFilter(sender: "news@example.com", forwardTo: "box@example.com", labelID: nil, confirmed: confirmed(.filter, to: ["box@example.com"])); XCTFail("should throw") }
         catch {
             guard case GmailService.GmailError.needsActionPermission = error else { return XCTFail("expected needsActionPermission, got \(error)") }
             XCTAssertTrue((error as? GmailService.GmailError)?.needsReconnect ?? false)
         }
+    }
+
+    func testForwardingStatusIsReadOnlyGet() async throws {
+        let d = defaults(); let rec = Recorder()
+        rec.reply = #"{"forwardingAddresses":[{"forwardingEmail":"Box@Example.com","verificationStatus":"accepted"},{"forwardingEmail":"wait@example.org","verificationStatus":"pending"}]}"#
+        let a = make(d, recorder: rec)
+        let entries = try await a.forwardingStatus()
+        XCTAssertEqual(rec.requests.count, 1)
+        XCTAssertEqual(rec.requests[0].httpMethod, "GET")
+        XCTAssertNil(rec.requests[0].httpBody)
+        XCTAssertTrue(rec.requests[0].url!.absoluteString.hasSuffix("/settings/forwardingAddresses"))
+        XCTAssertEqual(ForwardingStatus.of("box@example.com", in: entries), .verified)
+        XCTAssertEqual(ForwardingStatus.of("wait@example.org", in: entries), .pending)
+        XCTAssertEqual(ForwardingStatus.of("other@example.net", in: entries), .missing)
+        XCTAssertTrue(ForwardingStatus.missing.label.contains("Forwarding and POP/IMAP"))
+    }
+
+    func testForwardingStatusHandlesEmptyList() async throws {
+        let d = defaults(); let rec = Recorder(); rec.reply = "{}"
+        let entries = try await make(d, recorder: rec).forwardingStatus()
+        XCTAssertTrue(entries.isEmpty)
+        XCTAssertEqual(ForwardingStatus.of("box@example.com", in: entries), .missing)
     }
 
     func testMimeNeverAllowsHeaderInjection() {

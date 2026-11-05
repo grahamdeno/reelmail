@@ -2,12 +2,12 @@ import Foundation
 import Observation
 
 // Everything that guards Gmail changes beyond reading, Trash and Done (approved 2026-11-04, Sprint 6).
-// Every send, forward, filter and forwarding-address action needs a ConfirmedAction, which only the preview sheet makes.
+// Every send, forward and filter action needs a ConfirmedAction, which only the preview sheet makes.
 
 /// What the owner is asked to approve. Plain words, no mail bodies.
 struct ActionPreview: Identifiable, Equatable {
     enum Kind: String, Codable, Hashable {
-        case send, forward, filter, deleteFilter, forwardingAddress, label, trashScreened, shoebox, unsubscribe
+        case send, forward, filter, deleteFilter, label, trashScreened, shoebox, unsubscribe
     }
     let id: String
     let kind: Kind
@@ -86,11 +86,33 @@ struct ForwardAllowlist {
         let a = address.trimmingCharacters(in: .whitespaces).lowercased()
         guard Self.isAddress(a) else { return false }
         defaults.set(Array(Set(addresses + [a])), forKey: Self.key)
+        SettingsSync.localChanged(defaults)
         return true
     }
 
     func remove(_ address: String) {
         defaults.set(addresses.filter { $0 != address.lowercased() }, forKey: Self.key)
+        SettingsSync.localChanged(defaults)
+    }
+}
+
+/// How Gmail lists an allowlisted address. Filters can forward only to addresses Gmail shows as verified.
+enum ForwardingStatus: Equatable {
+    case verified, pending, missing
+
+    struct Entry: Equatable { let email: String; let verification: String }
+
+    static func of(_ address: String, in entries: [Entry]) -> ForwardingStatus {
+        guard let e = entries.first(where: { $0.email.lowercased() == address.lowercased() }) else { return .missing }
+        return e.verification.lowercased() == "accepted" ? .verified : .pending
+    }
+
+    var label: String {
+        switch self {
+        case .verified: "Verified in Gmail"
+        case .pending: "Pending in Gmail"
+        case .missing: "Not in Gmail yet: add it in Gmail Settings > Forwarding and POP/IMAP"
+        }
     }
 }
 

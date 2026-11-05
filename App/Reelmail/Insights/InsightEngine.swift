@@ -44,7 +44,11 @@ final class InsightEngine {
             let limit = min(3000, store.processed.count + Self.batchSize)
             let listed = try await client.listMessageIDs(query: Self.query, limit: limit)
             let fresh = listed.ids.filter { !store.processed.contains($0) }
-            for id in fresh.prefix(Self.batchSize) {
+            // Work on a copy and publish it every 100 messages, so screens that show insights redraw a few times
+            // per pass instead of once per message (that made scrolling lag while the history was being read).
+            var working = store
+            defer { store = working }
+            for (n, id) in fresh.prefix(Self.batchSize).enumerated() {
                 try Task.checkCancellation()
                 let stub = try await client.getMetadata(id: id)
                 var body = ""
@@ -52,11 +56,13 @@ final class InsightEngine {
                     body = (try? await client.getMessage(id: id, account: account))?.body ?? ""
                 }
                 let input = InsightInput(id: id, fromName: stub.fromName, fromAddress: stub.fromAddress, subject: stub.subject, date: stub.date, body: body)
-                for fact in InsightParsers.parse(input) { store.add(fact) }
-                store.processed.insert(id)
+                for fact in InsightParsers.parse(input) { working.add(fact) }
+                working.processed.insert(id)
+                if (n + 1) % 100 == 0 { store = working }
             }
-            store.historySeen = store.processed.count
-            store.historyDone = !listed.truncated && fresh.count <= Self.batchSize
+            working.historySeen = working.processed.count
+            working.historyDone = !listed.truncated && fresh.count <= Self.batchSize
+            store = working
             storage.save(store)
             await PaymentAlarmNotifier.announce(store: store)
         } catch is CancellationError {

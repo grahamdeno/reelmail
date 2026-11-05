@@ -9,7 +9,13 @@ struct ReelmailApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        // Restore typed settings from iCloud before anything reads them.
+        SettingsSync.standard.start()
         let store = FeedStore()
+        NotificationCenter.default.addObserver(forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+                                               object: NSUbiquitousKeyValueStore.default, queue: .main) { _ in
+            if SettingsSync.standard.pull() { MainActor.assumeIsolated { store.bumpForScreening() } }
+        }
         _store = State(initialValue: store)
         MorningBriefScheduler.register(store: store)
         UNUserNotificationCenter.current().delegate = NotificationOpener.shared

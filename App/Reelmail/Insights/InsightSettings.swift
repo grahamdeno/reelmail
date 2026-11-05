@@ -25,7 +25,7 @@ struct InsightSettingsData: Codable, Equatable {
     var kids: [KidProfile] = []
 }
 
-/// Households and kids, saved on this phone only.
+/// Households and kids, saved on this phone and backed up to your iCloud (SettingsSync) unless you turn that off.
 struct InsightSettings {
     static let key = "lovely.insights.settings"
     let defaults: UserDefaults
@@ -39,9 +39,10 @@ struct InsightSettings {
 
     func save(_ s: InsightSettingsData) {
         if let data = try? JSONEncoder().encode(s) { defaults.set(data, forKey: Self.key) }
+        SettingsSync.localChanged(defaults)
     }
 
-    func clear() { defaults.removeObject(forKey: Self.key) }
+    func clear() { defaults.removeObject(forKey: Self.key); SettingsSync.localChanged(defaults) }
 
     /// The household a bill belongs to: a household naming its sender domain, else the first one without domains.
     static func household(for bill: Bill, in all: [Household]) -> Household? {

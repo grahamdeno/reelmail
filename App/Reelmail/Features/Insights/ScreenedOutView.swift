@@ -38,7 +38,7 @@ struct ScreenedOutView: View {
                     HStack {
                         Button("Accept") { store.accept(c) }.buttonStyle(CalmActionStyle(prominent: true))
                         if store.actions != nil {
-                            Button("Decline") { target = c; preview = ScreenedOut.declinePreview(c) }.buttonStyle(CalmActionStyle())
+                            Button("Decline", role: .destructive) { target = c; preview = ScreenedOut.declinePreview(c) }.buttonStyle(CalmActionStyle())
                         }
                     }
                 }.padding(.vertical, 4)
@@ -59,13 +59,13 @@ struct ScreenedOutView: View {
         .navigationTitle("New senders").navigationBarTitleDisplayMode(.inline)
         .task { await store.verifyNewSenders() }
         .sheet(item: $preview) { p in
-            ActionPreviewSheet(preview: p, confirmTitle: "Decline") { confirmed in
+            ActionPreviewSheet(preview: p, confirmTitle: "Decline", destructive: true) { confirmed in
                 guard let c = target else { return }
                 Task { await store.decline(c, confirmed: confirmed) }
             }
         }
         .sheet(item: $trashPreview) { p in
-            ActionPreviewSheet(preview: p, confirmTitle: "Move to Trash") { _ in
+            ActionPreviewSheet(preview: p, confirmTitle: "Move to Trash", destructive: true) { _ in
                 guard !oldIDs.isEmpty else { return }
                 Task { await store.trashScreenedOut(oldIDs) }
             }

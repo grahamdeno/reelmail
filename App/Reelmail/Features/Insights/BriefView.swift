@@ -56,7 +56,7 @@ struct BriefView: View {
                 }
                 if digest.todo.count > 0 { line("To do", sub: "\(digest.todo.count) in Home") { router.tab = .home; router.path = [] } }
                 let kids = InsightSettings().load().kids
-                if !kids.isEmpty { line("Kids", sub: "\(kids.reduce(0) { $0 + KidInsights.mail(for: $1, in: store.posts).count }) in mail") { router.open(.kids) } }
+                if !kids.isEmpty { line("Kids", sub: "\(kids.reduce(0) { $0 + store.kidMail(for: $1).count }) in mail") { router.open(.kids) } }
                 let energy = EnergyInsights.summary(store.insights.store, household: nil)
                 if energy.latest != nil { line("Energy", sub: energy.headline) { router.open(.energy) } }
                 if !money.actionNeeded.isEmpty {

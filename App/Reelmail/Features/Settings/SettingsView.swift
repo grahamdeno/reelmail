@@ -41,9 +41,9 @@ struct SettingsView: View {
                 }
                 if store.gmailConfigured, store.mode == .gmail, !store.needsReconnect {
                     // Quiet on purpose: it clears the mail kept on this phone.
-                    Button { Task { await store.disconnectGmail() } } label: {
+                    Button(role: .destructive) { Task { await store.disconnectGmail() } } label: {
                         Label("Disconnect Gmail", systemImage: "envelope.badge.shield.half.filled")
-                            .font(.subheadline).foregroundStyle(CalmStyle.secondary)
+                            .font(.subheadline).foregroundStyle(CalmStyle.roseInk)
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                     }.buttonStyle(.plain)
                 }
@@ -62,6 +62,7 @@ struct SettingsView: View {
 
                 SettingsHeader(text: "Households and kids")
                 SettingsRow(title: "Households and kids") { router.open(.insightSettings) }
+                ICloudBackupCard()
 
                 SettingsHeader(text: "Gmail actions")
                 SettingsRow(title: "Forwarding addresses") { router.open(.forwardingAddresses) }
@@ -315,8 +316,8 @@ struct OtherAddressesCard: View {
                 HStack {
                     Text(address).font(.subheadline).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 8)
-                    Button("Remove") { store.removeOtherAddress(address) }
-                        .font(.subheadline).foregroundStyle(CalmStyle.blue).frame(minWidth: 44, minHeight: 44)
+                    Button("Remove", role: .destructive) { store.removeOtherAddress(address) }
+                        .font(.subheadline).foregroundStyle(CalmStyle.roseInk).frame(minWidth: 44, minHeight: 44)
                 }
             }
             HStack(spacing: 8) {
@@ -371,11 +372,28 @@ struct ChatSwitchCard: View {
             Toggle("Chat walk-through", isOn: $enabled)
             Text("Adds a text box to the walk-through for sorting rules, such as hiding a sender. Rules apply only after you tap Apply.")
                 .font(.caption).foregroundStyle(CalmStyle.secondary)
-            Button("Remove rules made in chat (\(count))") { store.removeChatRules(); count = LearnedRuleStore().chatRules.count }
+            Button("Remove rules made in chat (\(count))", role: .destructive) { store.removeChatRules(); count = LearnedRuleStore().chatRules.count }
+                .foregroundStyle(count == 0 ? CalmStyle.secondary : CalmStyle.roseInk)
                 .disabled(count == 0)
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
         .background(CalmStyle.card, in: RoundedRectangle(cornerRadius: 16))
         .onChange(of: enabled) { _, _ in count = LearnedRuleStore().chatRules.count }
+    }
+}
+
+/// Backs up what you typed to your iCloud. Mail is never backed up.
+struct ICloudBackupCard: View {
+    @AppStorage(SettingsSync.enabledKey) private var enabled = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle("Back up to iCloud", isOn: $enabled)
+                .onChange(of: enabled) { _, on in if on { SettingsSync.standard.start() } }
+            Text("Households, kids, forwarding addresses and your Shoebox address, so a reinstall or a new iPhone gets them back. Mail and Gmail sign-in are never backed up.")
+                .font(.caption).foregroundStyle(CalmStyle.secondary)
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(CalmStyle.card, in: RoundedRectangle(cornerRadius: 16))
     }
 }

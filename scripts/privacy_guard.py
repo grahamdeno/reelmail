@@ -2,8 +2,9 @@
 """Privacy guard for Lovely's Gmail access (per-endpoint allowlist).
 
 Approved 2026-11-01: gmail.modify for Trash and Done.
-Approved 2026-11-04 (Sprint 6): filters, forwarding addresses, sending and Lovely/ labels, only in GmailActions.swift,
-each behind a ConfirmedAction made by the preview sheet.
+Approved 2026-11-04 (Sprint 6): filters, sending and Lovely/ labels, only in GmailActions.swift,
+each behind a ConfirmedAction made by the preview sheet. Forwarding addresses are read only (GET); Gmail's create call
+works only for Workspace service accounts, and the owner adds addresses in Gmail's own Settings.
 Never allowed: permanent delete, the full-access scope, other Gmail settings.
 
   check     Scan App/Reelmail and fail on any violation.
@@ -23,6 +24,8 @@ GUARDS = "Gmail/ActionGuards.swift"
 
 # Helpers in GmailActions.swift that do not change anything by themselves.
 HELPERS = {"request", "call", "deliver", "encode", "init"}
+# Read-only functions in GmailActions.swift: no ConfirmedAction, and every call in them must be a GET.
+READ_ONLY = {"forwardingStatus"}
 
 
 def strip_comments(text):
@@ -68,10 +71,20 @@ def check(files):
             for m in re.finditer(r"call\(\"DELETE\",\s*\"([^\"]*)", text):
                 if "/settings/filters/" not in m.group(1):
                     bad.append(f"{rel}:{text[: m.start()].count(chr(10)) + 1}: DELETE may remove filters only.")
+            for m in re.finditer(r'call\("(\w+)",\s*"/settings/forwardingAddresses', text):
+                if m.group(1) != "GET":
+                    bad.append(f"{rel}:{text[: m.start()].count(chr(10)) + 1}: Forwarding addresses may only be read (GET).")
             # Every changing function takes a ConfirmedAction.
             for m in re.finditer(r"\bfunc\s+(\w+)\s*(?:<[^>]*>)?\s*\(([^{]*)\{", text, re.S):
                 name, signature = m.group(1), m.group(2)
                 if name in HELPERS:
+                    continue
+                if name in READ_ONLY:
+                    nxt = re.search(r"\n\s*(?:private\s+)?(?:func|struct|// MARK)\b", text[m.end():])
+                    body = text[m.end(): m.end() + nxt.start()] if nxt else text[m.end():]
+                    for c in re.finditer(r'call\("(\w+)"', body):
+                        if c.group(1) != "GET":
+                            bad.append(f"{rel}:{text[: m.start()].count(chr(10)) + 1}: func {name} is read-only and may only GET.")
                     continue
                 if "ConfirmedAction" not in signature:
                     bad.append(f"{rel}:{text[: m.start()].count(chr(10)) + 1}: func {name} must take a ConfirmedAction.")
@@ -92,6 +105,7 @@ struct GmailActions {
     func deleteFilter(id: String, confirmed: ConfirmedAction) async throws { try await call("DELETE", "/settings/filters/x") }
     func file(messageID: String, confirmed: ConfirmedAction) async throws { body["removeLabelIds"] = ["INBOX"] ; call("POST", "/messages/x/modify") }
     func request(_ method: String) throws -> Int { 0 }
+    func forwardingStatus() async throws -> [Int] { let l: L = try await call("GET", "/settings/forwardingAddresses"); return [] }
 }
 '''
     ok = {ACTIONS: good_actions, SERVICE: 'path = "/modify"; json = "{\\"addLabelIds\\":[\\"UNREAD\\"]}"', CONFIG: 'let modify = "https://www.googleapis.com/auth/gmail.modify"'}
@@ -113,6 +127,9 @@ struct GmailActions {
         "api from elsewhere": {"Model/X.swift": 'let u = "https://gmail.googleapis.com/gmail/v1/users/me/messages"'},
         "insert message": {"Model/X.swift": 'let u = base + "/messages/insert"'},
         "auto forwarding": {ACTIONS: good_actions + '\nlet u = "/settings/forwarding"'},
+        "forwarding address create": {ACTIONS: good_actions.replace('call("GET", "/settings/forwardingAddresses")', 'call("POST", "/settings/forwardingAddresses")')},
+        "read-only func that writes": {ACTIONS: good_actions.replace('call("GET", "/settings/forwardingAddresses")', 'call("POST", "/settings/filters")')},
+        "unconfirmed forwarding create": {ACTIONS: good_actions + '\nstruct Z { func addForwarding() async throws { call("GET", "/settings/forwardingAddresses") } }'},
         "endpoint built from parts": {"Model/X.swift": 'let u = "/messages/" + "send"'},
     }
     for name, files in cases.items():

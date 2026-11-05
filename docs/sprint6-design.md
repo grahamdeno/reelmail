@@ -26,7 +26,7 @@ Lovely stops being only a sorter. It reads the mail that is really data (stateme
 |---|---|---|
 | `gmail.modify` | existing | Trash, UNREAD (existing); now also create and apply Lovely's own labels |
 | `gmail.settings.basic` | new | Create, list and delete Gmail filters |
-| `gmail.settings.sharing` | new | Add a forwarding address (Gmail verifies it by email) |
+| `gmail.settings.sharing` | new | Kept for filters that forward. Adding a forwarding address by API is Workspace-only (HTTP 403 on personal Gmail), so the owner adds it in Gmail Settings and Lovely only reads its status |
 | `gmail.send` | new | Forward mail, send replies the owner wrote or approved |
 
 Permanent delete (`messages.delete`, `batchDelete`), full access (`https://mail.google.com/`) and changing other Gmail settings (vacation, IMAP, delegates) stay forbidden.
@@ -161,7 +161,7 @@ struct BillFacts {
 - When the owner forwards school mail of the same kind to the Shoebox address twice, or taps "Send to Shoebox" on a newsletter summary, Lovely offers **Make this a Shoebox rule**.
 - The sheet shows: the filter (from address, subject words), the forwarding address, and the list of matching mail from the last 10 days with checkboxes, all checked.
 - One tap **Create rule and forward N** creates the Gmail filter (forward action) and queues the N forwards through the undo window. The filter handles new mail from then on.
-- If the Shoebox address is not yet a verified forwarding address, Lovely adds it first and says "Confirm the email Gmail sent to Shoebox, then come back." The forwards of past mail still go now; only the filter waits.
+- If the Shoebox address is not yet a verified forwarding address in Gmail, Settings > Forwarding addresses says so and points to Gmail Settings > Forwarding and POP/IMAP. Lovely never adds it by API (Workspace-only).
 
 ## 5. Morning brief
 

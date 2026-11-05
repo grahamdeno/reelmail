@@ -10,6 +10,7 @@ struct OpenEmailView: View {
     @State private var unsubscribePreview: ActionPreview?
     @State private var unsubscribeURL: URL?
     @State private var handoffPost: Post?
+    @State private var shoeboxPreview: ActionPreview?
 
     var body: some View {
         if let post = store.posts.first(where: { $0.id == postID }) {
@@ -48,6 +49,11 @@ struct OpenEmailView: View {
             .navigationTitle(organization ? HomeDigest.organizationName(email.from) : email.from.name)
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $handoffPost) { HandoffSheet(post: $0) }
+            .sheet(item: $shoeboxPreview) { p in
+                ActionPreviewSheet(preview: p, confirmTitle: "Send") { confirmed in
+                    if let shoebox = p.recipients.first { store.sendToShoebox(messageID: post.id, shoebox: shoebox, confirmed: confirmed) }
+                }
+            }
             .sheet(item: $unsubscribePreview) { p in
                 ActionPreviewSheet(preview: p, confirmTitle: "Unsubscribe") { _ in if let url = unsubscribeURL { Task { await store.unsubscribe(url: url, sender: email.from.name) } } }
             }
@@ -85,6 +91,13 @@ struct OpenEmailView: View {
             .accessibilityLabel("Move to Gmail Trash")
             Menu {
                 Button { openInGmail(post.email) } label: { Label("Open in Gmail", systemImage: "arrow.up.forward.app") }
+                if let shoebox = ShoeboxRule.address(),
+                   ShoeboxRule.offersSend(shoebox: shoebox, allowlist: ForwardAllowlist(), connected: store.actions != nil && store.mode == .gmail,
+                                          fromAddress: post.email.from.email, fromName: post.email.from.name, subject: post.email.subject) {
+                    Button { shoeboxPreview = ShoeboxRule.sendPreview(messageID: post.id, fromName: post.email.from.name, subject: post.email.subject, shoebox: shoebox) } label: {
+                        Label("Send to Shoebox", systemImage: "tray.and.arrow.down")
+                    }
+                }
                 if HandoffPrompt.isAllowed(address: post.email.from.email, name: post.email.from.name, subject: post.email.subject, sensitive: post.summary.sensitive) {
                     Button { handoffPost = post } label: { Label("Hand off to an agent", systemImage: "square.and.arrow.up.on.square") }
                 }

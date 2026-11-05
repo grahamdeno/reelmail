@@ -5,6 +5,8 @@ struct ActionPreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     let preview: ActionPreview
     var confirmTitle = "Confirm"
+    /// Red confirm button for deletes, declines and Trash.
+    var destructive = false
     let onConfirm: (ConfirmedAction) -> Void
 
     var body: some View {
@@ -18,7 +20,7 @@ struct ActionPreviewSheet: View {
                         ForEach(preview.recipients, id: \.self) { Text($0).font(.body.weight(.medium)) }
                     }
                     Text("Nothing happens until you tap \(confirmTitle).").font(.caption).foregroundStyle(CalmStyle.secondary).padding(.top, 6)
-                    Button(confirmTitle) {
+                    Button(confirmTitle, role: destructive ? .destructive : nil) {
                         onConfirm(ConfirmedAction(preview: preview))
                         dismiss()
                     }.buttonStyle(CalmActionStyle(prominent: true))

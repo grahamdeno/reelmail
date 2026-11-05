@@ -208,7 +208,7 @@ final class FeedStore {
     }
 
     func disconnectGmail() async {
-        bump(); revision += 1; gmail.signOut(); cacheStore?.removeAll(); insights.reset(); InsightSettings().clear()
+        bump(); revision += 1; gmail.signOut(); cacheStore?.removeAll(); insights.reset()  // Households, kids, forwarding addresses and Shoebox are typed by you, not read from mail: they stay.
         posts = []; sentByMe = []; hidden.removeAll(); seen.removeAll(); summaries = [:]
         filter = .all; mode = .sample; account = nil; accountRules = nil; needsReconnect = false
         lastFetched = nil; inboxTruncated = false
@@ -282,6 +282,25 @@ final class FeedStore {
         derivedKey = key
         return built
     }
+
+    /// Home reads several lists on every redraw. Each is rebuilt only when its inputs change (or the minute turns),
+    /// so scrolling and switching tabs don't re-scan every message.
+    @ObservationIgnored private var memo: [String: (key: Int, value: Any)] = [:]
+    private func memoized<T>(_ name: String, _ inputs: [AnyHashable], build: () -> T) -> T {
+        _ = derived // registers the mail dependencies and refreshes derivedKey
+        var h = Hasher()
+        h.combine(derivedKey)
+        h.combine(Int(Date().timeIntervalSince1970 / 60))
+        for i in inputs { h.combine(i) }
+        let key = h.finalize()
+        if let m = memo[name], m.key == key, let v = m.value as? T { return v }
+        let v = build()
+        memo[name] = (key, v)
+        return v
+    }
+
+    /// For extensions in other files.
+    func cached<T>(_ name: String, _ inputs: [AnyHashable], build: () -> T) -> T { memoized(name, inputs, build: build) }
 
     private func buildDerived(rules: LocalTriageRules) -> Derived {
         let context = TriageContext(account: mode == .gmail ? account : SampleData.me.email, sent: sentByMe,
@@ -383,6 +402,7 @@ final class FeedStore {
 
     /// The feed in priority order: sections top to bottom, newest first within each.
     var sections: [(section: FeedSection, posts: [Post])] {
+        memoized("sections", [filter]) {
         let d = derived
         var grouped: [FeedSection: [Post]] = [:]
         for post in d.active {
@@ -392,6 +412,7 @@ final class FeedStore {
         return FeedSection.allCases.compactMap { s in
             guard let items = grouped[s], !items.isEmpty else { return nil }
             return (s, items.sorted { $0.email.date > $1.email.date })
+        }
         }
     }
 
@@ -403,6 +424,7 @@ final class FeedStore {
 
     /// The Home "All" view.
     var digest: HomeDigest {
+        memoized("digest", [laterUntil, insights.store.energy.isEmpty]) {
         let d = derived
         let overrides = rules.organizationOverrides
         let clock = Date()
@@ -415,14 +437,17 @@ final class FeedStore {
         let back = Set(laterUntil.filter { !LaterSchedule.isPending($0.value, now: clock) }.keys)
         if !back.isEmpty { digest.todo = digest.todo.filter { back.contains($0.id) } + digest.todo.filter { !back.contains($0.id) } }
         return digest
+        }
     }
 
     /// Mail with a date still ahead, earliest first (Later-pending mail excluded).
     var comingUp: [ComingUp.Entry] {
+        memoized("comingUp", [laterUntil]) {
         let d = derived
         let clock = Date()
         let live = d.active.filter { !LaterSchedule.isPending(laterUntil[$0.id] ?? .distantPast, now: clock) }
         return ComingUp.entries(posts: live, section: { d.assessments[$0.id]?.section ?? .people }, now: clock)
+        }
     }
 
     /// The brief for the morning at `fire`, from the mail loaded now. Later items that come due before then count as back.
@@ -665,16 +690,20 @@ final class FeedStore {
 
     /// Commitments you made in mail you sent that nobody has closed. Up to 14 days old.
     var promises: [PromiseRules.Item] {
+        memoized("promises", [promisesClosed, verdicts]) {
         PromiseRules.open(sent: sentByMe, inbox: posts.map(\.email), context: derived.context, closed: promisesClosed,
                           veto: { [verdicts = self.verdicts] email, _ in verdicts[VerdictCache.commitKey(email.id)] ?? true }, now: clock())
+        }
     }
 
     /// Asks you sent that nobody has answered, 3 to 21 days old.
     var waitingOnThem: [WaitingOnThem.Item] {
+        memoized("waitingOnThem", [waitingDismissed, verdicts, threadChecks.count]) {
         let context = derived.context
         let candidates = WaitingOnThem.candidates(sent: sentByMe, context: context, dismissed: waitingDismissed, now: clock())
         return WaitingOnThem.open(candidates: candidates, inbox: posts.map(\.email), context: context, lookups: threadChecks)
             .filter { verdicts[VerdictCache.askKey($0.id)] ?? true }
+        }
     }
 
     func closePromise(_ item: PromiseRules.Item, notAPromise: Bool = false) {

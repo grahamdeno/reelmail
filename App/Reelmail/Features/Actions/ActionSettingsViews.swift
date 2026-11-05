@@ -1,12 +1,14 @@
 import SwiftUI
 
 /// Settings › Forwarding addresses. Mail is forwarded only to addresses listed here.
+/// Gmail's own Settings adds and verifies forwarding addresses; Lovely only reads what Gmail lists.
 struct ForwardingAddressesView: View {
     @Environment(FeedStore.self) private var store
     @State private var addresses = ForwardAllowlist().addresses
     @State private var entry = ""
-    @State private var preview: ActionPreview?
     @State private var status: String?
+    @State private var gmailEntries: [ForwardingStatus.Entry]?
+    @State private var checking = false
 
     var body: some View {
         Form {
@@ -16,32 +18,36 @@ struct ForwardingAddressesView: View {
                         Text(a)
                         Button(ShoeboxRule.address() == a ? "This is your Shoebox address" : "Use as Shoebox address") { ShoeboxRule.setAddress(a); addresses = ForwardAllowlist().addresses }
                             .font(.caption).disabled(ShoeboxRule.address() == a)
-                        Button("Ask Gmail to verify") { preview = ActionPreview(kind: .forwardingAddress, title: "Add a forwarding address in Gmail",
-                            lines: ["Gmail will email a confirmation code to this address.", "You confirm it once, then filters can forward to it."], recipients: [a]) }
-                            .font(.caption)
+                        if let gmailEntries {
+                            let s = ForwardingStatus.of(a, in: gmailEntries)
+                            Text(s.label).font(.caption).foregroundStyle(s == .verified ? CalmStyle.secondary : Color.orange)
+                        }
                     }
                 }
                 .onDelete { offsets in offsets.map { addresses[$0] }.forEach { ForwardAllowlist().remove($0) }; addresses = ForwardAllowlist().addresses }
                 HStack {
                     TextField("Add an address", text: $entry).textInputAutocapitalization(.never).keyboardType(.emailAddress).autocorrectionDisabled()
-                    Button("Add") { if ForwardAllowlist().add(entry) { entry = ""; addresses = ForwardAllowlist().addresses } else { status = "That does not look like an email address." } }
+                    Button("Add") { if ForwardAllowlist().add(entry) { entry = ""; addresses = ForwardAllowlist().addresses; Task { await check() } } else { status = "That does not look like an email address." } }
                         .disabled(entry.isEmpty)
                 }
             } header: { Text("Allowed addresses") } footer: {
-                Text("Lovely forwards mail only to these. Add your Shoebox address here first.")
+                Text("Lovely forwards mail only to these, and only once Gmail shows them as verified. Add and verify an address in Gmail on the web: Settings > See all settings > Forwarding and POP/IMAP > Add a forwarding address.")
+            }
+            Section {
+                Button(checking ? "Checking Gmail…" : "Check Gmail again") { Task { await check() } }.disabled(checking || store.actions == nil)
             }
             if let status { Section { Text(status).font(.caption) } }
         }
         .navigationTitle("Forwarding addresses").navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $preview) { p in
-            ActionPreviewSheet(preview: p, confirmTitle: "Ask Gmail") { confirmed in
-                guard let actions = store.actions, let address = p.recipients.first else { status = "Connect Gmail first."; return }
-                Task {
-                    do { try await actions.addForwardingAddress(address, confirmed: confirmed); status = "Gmail sent a code to \(address). Confirm it there once." }
-                    catch { status = error.localizedDescription }
-                }
-            }
-        }
+        .task { await check() }
+    }
+
+    /// Read-only: asks Gmail which forwarding addresses it has. Changes nothing.
+    private func check() async {
+        guard let actions = store.actions else { status = "Connect Gmail to see what Gmail has verified."; return }
+        checking = true; defer { checking = false }
+        do { gmailEntries = try await actions.forwardingStatus(); status = nil }
+        catch { status = "Could not check Gmail. \(error.localizedDescription)" }
     }
 }
 
@@ -70,7 +76,7 @@ struct GmailFiltersView: View {
         }
         .navigationTitle("Gmail filters").navigationBarTitleDisplayMode(.inline)
         .sheet(item: $preview) { p in
-            ActionPreviewSheet(preview: p, confirmTitle: "Delete filter") { confirmed in
+            ActionPreviewSheet(preview: p, confirmTitle: "Delete filter", destructive: true) { confirmed in
                 guard let actions = store.actions else { status = "Connect Gmail first."; return }
                 Task {
                     do { try await actions.deleteFilter(id: p.id, confirmed: confirmed); filters = FilterRegistry().filters }
@@ -96,6 +102,6 @@ struct GmailActivityView: View {
             }
         }
         .navigationTitle("Gmail activity").navigationBarTitleDisplayMode(.inline)
-        .toolbar { Button("Clear") { ActivityLog().clear(); entries = [] }.disabled(entries.isEmpty) }
+        .toolbar { Button("Clear", role: .destructive) { ActivityLog().clear(); entries = [] }.disabled(entries.isEmpty) }
     }
 }

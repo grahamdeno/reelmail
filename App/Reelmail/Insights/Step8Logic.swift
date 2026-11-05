@@ -14,9 +14,23 @@ enum ShoeboxRule {
 
     static func setAddress(_ value: String?, defaults: UserDefaults = .standard) {
         if let value, ForwardAllowlist.isAddress(value) { defaults.set(value.lowercased(), forKey: key) } else { defaults.removeObject(forKey: key) }
+        SettingsSync.localChanged(defaults)
     }
 
     /// The Gmail search for the last 10 days of one sender's mail. The sender is quoted so it cannot add search terms.
+    /// "Send to Shoebox" shows on an email when a Shoebox address is set and allowed, Gmail is connected, and it isn't health mail.
+    static func offersSend(shoebox: String?, allowlist: ForwardAllowlist, connected: Bool, fromAddress: String, fromName: String, subject: String) -> Bool {
+        guard connected, let shoebox, allowlist.contains(shoebox) else { return false }
+        return !HealthMail.isHealth(address: fromAddress, name: fromName, subject: subject)
+    }
+
+    /// The preview for forwarding one message to Shoebox.
+    static func sendPreview(messageID: String, fromName: String, subject: String, shoebox: String) -> ActionPreview {
+        ActionPreview(id: "shoebox-" + messageID, kind: .forward, title: "Send to Shoebox",
+                      lines: ["Forwards this one email as plain text.", "From: \(fromName)", "Subject: \(subject)", "You have 10 seconds to undo."],
+                      recipients: [shoebox])
+    }
+
     static func backfillQuery(sender: String) -> String {
         let safe = sender.filter { !$0.isWhitespace && $0 != "\"" && $0 != "(" && $0 != ")" }
         return "from:\(safe) newer_than:\(backfillDays)d"

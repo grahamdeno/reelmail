@@ -61,7 +61,7 @@ struct SortingReviewView: View {
                     .buttonStyle(CalmActionStyle(prominent: true)).fixedSize()
                     Spacer()
                     if confirmingReset {
-                        Button("Clear all") { review.reset(); confirmingReset = false }.buttonStyle(CalmActionStyle()).fixedSize()
+                        Button("Clear all", role: .destructive) { review.reset(); confirmingReset = false }.buttonStyle(CalmActionStyle()).fixedSize()
                         Button("Keep") { confirmingReset = false }.buttonStyle(CalmActionStyle()).fixedSize()
                     } else {
                         Button("Start over") { confirmingReset = true }.buttonStyle(CalmActionStyle()).fixedSize()

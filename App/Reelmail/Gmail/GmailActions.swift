@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// The only place Lovely writes to Gmail beyond Trash and Done: send, forward, filters, forwarding addresses and Lovely/ labels.
+/// The only place Lovely writes to Gmail beyond Trash and Done: send, forward, filters and Lovely/ labels. Forwarding addresses are read, never changed.
 /// Every change needs a ConfirmedAction from the preview sheet. scripts/privacy_guard.py enforces that these endpoints
 /// appear in this file only, and that each changing function takes a ConfirmedAction.
 struct GmailActions {
@@ -83,15 +83,13 @@ struct GmailActions {
         activity.record(kind: "filter", summary: "Deleted a filter Lovely made")
     }
 
-    // MARK: Forwarding addresses
+    // MARK: Forwarding addresses (read-only)
 
-    /// Asks Gmail to verify a forwarding address. Gmail emails that address a code the owner must confirm once.
-    func addForwardingAddress(_ address: String, confirmed: ConfirmedAction) async throws {
-        try confirmed.require([.forwardingAddress])
-        try confirmed.requireRecipient(address)
-        guard allowlist.contains(address) else { throw ActionError.recipientNotAllowed(address) }
-        let _: Empty = try await call("POST", "/settings/forwardingAddresses", json: ["forwardingEmail": address.lowercased()])
-        activity.record(kind: "forwarding", summary: "Asked Gmail to verify \(address.lowercased())")
+    /// What Gmail says about each forwarding address. Read-only: personal Gmail accounts can add forwarding addresses
+    /// only in Gmail's own Settings (the API's create call is limited to Workspace service accounts), so Lovely never tries.
+    func forwardingStatus() async throws -> [ForwardingStatus.Entry] {
+        let list: ForwardingList = try await call("GET", "/settings/forwardingAddresses")
+        return (list.forwardingAddresses ?? []).map { ForwardingStatus.Entry(email: $0.forwardingEmail, verification: $0.verificationStatus ?? "") }
     }
 
     // MARK: Sending
@@ -126,6 +124,8 @@ struct GmailActions {
     private struct LabelItem: Decodable { let id: String; let name: String? }
     private struct LabelList: Decodable { let labels: [LabelItem]? }
     private struct FilterItem: Decodable { let id: String }
+    private struct ForwardingItem: Decodable { let forwardingEmail: String; let verificationStatus: String? }
+    private struct ForwardingList: Decodable { let forwardingAddresses: [ForwardingItem]? }
 
     private func encode(_ id: String) -> String { id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id }
 
